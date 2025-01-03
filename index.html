@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ride Hailing Service</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+        .hero {
+            background-image: url('https://source.unsplash.com/1600x900/?transport,car');
+            background-size: cover;
+            background-position: center;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+        .progress {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-wrapper">
+            <a href="#" class="brand-logo">Ride Hailing Service</a>
+            <ul id="nav-mobile" class="right hide-on-med-and-down">
+                <li><a href="#">Login</a></li>
+                <li><a href="#">Sign Up</a></li>
+                <li><a class="dropdown-trigger" href="#!" data-target="dropdown1">More<i class="material-icons right">arrow_drop_down</i></a></li>
+            </ul>
+        </div>
+    </nav>
+    <ul id="dropdown1" class="dropdown-content">
+        <li><a href="#">Help</a></li>
+        <li><a href="#">Contact Us</a></li>
+    </ul>
+    <div class="hero">
+        <h1>Ride Hailing Service</h1>
+        <button class="btn waves-effect waves-light" data-target="modal1">Request Ride
+            <i class="material-icons right">send</i>
+        </button>
+    </div>
+    <div id="modal1" class="modal">
+        <div class="modal-content">
+            <h4>Request Ride</h4>
+            <form>
+                <div class="input-field">
+                    <input id="pickup" type="text" class="validate" placeholder="Pickup Location">
+                    <label for="pickup">Pickup Location</label>
+                </div>
+                <div class="input-field">
+                    <input id="dropoff" type="text" class="validate" placeholder="Dropoff Location">
+                    <label for="dropoff">Dropoff Location</label>
+                </div>
+                <div class="input-field">
+                    <select id="service-type">
+                        <option value="economy">Economy ($2.50 per mile)</option>
+                        <option value="premium">Premium ($5.00 per mile)</option>
+                        <option value="luxury">Luxury ($10.00 per mile)</option>
+                    </select>
+                    <label>Service Type</label>
+                </div>
+                <div class="input-field">
+                    <select id="payment-method">
+                        <option value="cash">Cash</option>
+                        <option value="online">Online</option>
+                    </select>
+                    <label>Payment Method</label>
+                </div>
+                <button class="btn waves-effect waves-light" type="submit" name="action">Request Ride
+                    <i class="material-icons right">send</i>
+                </button>
+            </form>
+        </div>
+    </div>
+    <div id="driver-modal" class="modal">
+        <div class="modal-content">
+            <h4>Driver Options</h4>
+            <ul id="driver-list"></ul>
+            <button class="btn waves-effect waves-light" id="assign-driver-btn">Assign Driver
+                <i class="material-icons right">send</i>
+            </button>
+        </div>
+    </div>
+    <div id="payment-modal" class="modal">
+        <div class="modal-content">
+            <h4>Payment</h4>
+            <p>Estimated Fare: <span id="estimated-fare"></span></p>
+            <button class="btn waves-effect waves-light" id="pay-btn">Pay
+                <i class="material-icons right">send</i>
+            </button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="row">
+            <div class="col s12">
+                <div id="map"></div>
+                <button class="btn waves-effect waves-light" id="toggle-nearby-people-btn">Toggle Nearby People</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap&libraries=places" async defer></script>
+    <script>
+        let map;
+        let markers = [];
+        let pickupMarker;
+        let dropoffMarker;
+        let drivers = [];
+        let assignedDriver;
+        let estimatedTime;
+        let estimatedFare;
+        let paymentMethod;
+        let nearbyPeopleMarkers = [];
+        let nearbyPeopleList = [
+            { name: "John Doe", location: { lat: 37.7859, lng: -122.4364 }, fee: 10 },
+            { name: "Jane Doe", location: { lat: 37.7959, lng: -122.4064 }, fee: 15 },
+            { name: "Bob Smith", location: { lat: 37.8059, lng: -122.3964 }, fee: 20 },
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var elems = document.querySelectorAll('.modal');
+            var instances = M.Modal.init(elems);
+            var elems2 = document.querySelectorAll('.dropdown-trigger');
+            var instances2 = M.Dropdown.init(elems2);
+            var elems3 = document.querySelectorAll('select');
+            var instances3 = M.FormSelect.init(elems3);
+        });
+
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 37.7749, lng: -122.4194 },
+                zoom: 12,
+            });
+
+            const pickupInput = document.getElementById("pickup");
+            const dropoffInput = document.getElementById("dropoff");
+
+            const pickupAutocomplete = new google.maps.places.Autocomplete(pickupInput);
+            const dropoffAutocomplete = new google.maps.places.Autocomplete(dropoffInput);
+
+            pickupAutocomplete.addListener("place_changed", () => {
+                const place = pickupAutocomplete.getPlace();
+                if (!place.geometry) return;
+
+                if (pickupMarker) {
+                    pickupMarker.setMap(null);
+                }
+
+                pickupMarker = new google.maps.Marker({
+                    map: map,
+                    position: place.geometry.location,
+                });
+
+                map.setCenter(place.geometry.location);
+                map.setZoom(15);
+            });
+
+            dropoffAutocomplete.addListener("place_changed", () => {
+                const place = dropoffAutocomplete.getPlace();
+                if (!place.geometry) return;
+
+                if (dropoffMarker) {
+                    dropoffMarker.setMap(null);
+                }
+
+                dropoffMarker = new google.maps.Marker({
+                    map: map,
+                    position: place.geometry.location,
+                });
+
+                map.setCenter(place.geometry.location);
+                map.setZoom(15);
+            });
+
+            document.querySelector("form").addEventListener("submit", (e) => {
+                e.preventDefault();
+
+                estimatedTime = "10 minutes";
+                paymentMethod = document.getElementById("payment-method").value;
+                const serviceType = document.getElementById("service-type").value;
+                let pricePerMile;
+                switch (serviceType) {
+                    case "economy":
+                        pricePerMile = 2.50;
+                        break;
+                    case "premium":
+                        pricePerMile = 5.00;
+                        break;
+                    case "luxury":
+                        pricePerMile = 10.00;
+                        break;
+                }
+                const distance = getDistance(pickupMarker.getPosition(), dropoffMarker.getPosition());
+                estimatedFare = `$${(distance * pricePerMile).toFixed(2)}`;
+
+                var instance = M.Modal.getInstance(document.getElementById("driver-modal"));
+                instance.open();
+
+                document.getElementById("driver-list").innerHTML = "";
+                nearbyPeopleList.forEach((driver) => {
+                    const li = document.createElement("li");
+                    li.textContent = `${driver.name} - ${driver.fee}`;
+                    document.getElementById("driver-list").appendChild(li);
+                });
+            });
+
+            document.getElementById("assign-driver-btn").addEventListener("click", () => {
+                assignedDriver = nearbyPeopleList[0];
+                var instance = M.Modal.getInstance(document.getElementById("payment-modal"));
+                instance.open();
+            });
+
+            document.getElementById("pay-btn").addEventListener("click", () => {
+                // Payment logic here
+            });
+
+            document.getElementById("toggle-nearby-people-btn").addEventListener("click", () => {
+                if (nearbyPeopleMarkers.length === 0) {
+                    nearbyPeopleList.forEach((person) => {
+                        const marker = new google.maps.Marker({
+                            map: map,
+                            position: person.location,
+                            title: person.name,
+                        });
+                        nearbyPeopleMarkers.push(marker);
+                    });
+                } else {
+                    nearbyPeopleMarkers.forEach((marker) => {
+                        marker.setMap(null);
+                    });
+                    nearbyPeopleMarkers = [];
+                }
+            });
+        }
+
+        function getDistance(pickup, dropoff) {
+            const distance = google.maps.geometry.spherical.computeDistanceBetween(pickup, dropoff);
+            return distance / 1609.34; // convert meters to miles
+        }
+    </script>
+</body>
+</html>
